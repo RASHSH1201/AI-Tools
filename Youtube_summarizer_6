@@ -1,0 +1,48 @@
+import os
+import getpass
+import gradio as gr
+from youtube_transcript_api import YouTubeTranscriptApi
+from langchain.prompts import PromptTemplate
+from langchain_openai import ChatOpenAI
+
+# 🔐 Prompt for the API key securely
+os.environ["OPENAI_API_KEY"] = getpass.getpass("Enter your OpenAI API key: ")
+
+def get_transcript_from_url(url):
+    try:
+        video_id = url.split("v=")[1].split("&")[0]
+        transcript = YouTubeTranscriptApi.get_transcript(video_id)
+        return " ".join([line["text"] for line in transcript])
+    except Exception as e:
+        return f"Transcript fetch failed: {str(e)}"
+
+llm = ChatOpenAI(temperature=0.3, model="gpt-3.5-turbo")
+
+prompt = PromptTemplate(
+    input_variables=["transcript"],
+    template="""
+    Summarize the following video transcript in 5 bullet points:
+
+    Transcript:
+    {transcript}
+    """
+)
+
+def summarize_youtube_video(url):
+    transcript = get_transcript_from_url(url)
+    if "Transcript fetch failed" in transcript:
+        return transcript
+    prompt_input = prompt.format(transcript=transcript)
+    result = llm.invoke(prompt_input)
+    return result.content
+
+demo = gr.Interface(
+    fn=summarize_youtube_video,
+    inputs=gr.Textbox(label="Paste YouTube URL"),
+    outputs=gr.Textbox(label="AI-Generated Summary"),
+    title="YouTube Video Summarizer",
+    description="Enter a YouTube URL to get a 5-bullet summary of the transcript using OpenAI."
+)
+
+if __name__ == "__main__":
+    demo.launch()
